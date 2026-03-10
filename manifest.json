@@ -14,9 +14,7 @@
     {
       "matches": [
         "*://*.marumaru-x.com/*",
-        "*://marumaru-x.com/*",
-        "*://www.youtube.com/embed/*",
-        "*://www.youtube-nocookie.com/embed/*"
+        "*://marumaru-x.com/*"
       ],
       "all_frames": true,
       "js": ["content.js"],
