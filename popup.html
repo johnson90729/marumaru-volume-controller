@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { width: 280px; padding: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; }
+        .container { display: flex; flex-direction: column; gap: 15px; }
+        .domain-title { font-size: 14px; font-weight: bold; color: #333; word-break: break-all; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+        .row { display: flex; align-items: center; gap: 10px; }
+        input[type="range"] { flex-grow: 1; cursor: pointer; }
+        input[type="number"] { width: 55px; padding: 5px; border: 1px solid #ccc; border-radius: 4px; text-align: center; }
+        .hint { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="domain-title" id="domainLabel">讀取網域中...</div>
+        
+        <div class="row">
+            <input type="range" id="volumeSlider" min="0" max="100" value="100">
+            <input type="number" id="volumeInput" min="0" max="100" value="100">
+            <span style="font-weight: bold; color: #555;">%</span>
+        </div>
+        <div class="hint">拖曳滑桿或輸入數字，音量將自動為此網站永久記憶。</div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>

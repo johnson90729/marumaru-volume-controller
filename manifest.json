@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "多網域音量記憶控制器",
+  "version": "3.0",
+  "description": "全自動記憶各個網站的專屬音量，支援滑桿與數字精準輸入。",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.marumaru-x.com/*",
+        "*://marumaru-x.com/*",
+        "*://www.youtube.com/embed/*",
+        "*://www.youtube-nocookie.com/embed/*"
+      ],
+      "all_frames": true,
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
