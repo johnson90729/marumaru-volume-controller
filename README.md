@@ -1,39 +1,32 @@
-# marumaru-volume-controller
-# Domain Volume Enforcer 🔊
+# 多網站音量記憶控制器 v4.0.3
 
-A lightweight, highly aggressive Chrome extension designed to lock and remember custom volume settings for specific websites. 
+這個 Chrome／Edge Manifest V3 擴充功能會以頂層網站的 hostname 為單位，記住最後調整的 `<video>`／`<audio>` 音量，並在下次造訪該網站時自動套用。
 
-Originally built to tame websites with unusually loud default audio, this extension successfully bypasses Single Page Application (SPA) volume resets, site-specific JavaScript overrides, and cross-origin iframe restrictions (e.g., embedded YouTube players).
+## 功能
 
-## ✨ Key Features
+- 支援一般 HTTP 與 HTTPS 網站。
+- 從網站播放器或擴充功能 popup 調整音量時自動保存。
+- 網站腳本自行恢復舊音量時，不會覆蓋使用者保存的設定。
+- 只有明確的音量控制項才會被視為使用者調音量；點影片畫面或播放進度條不會誤改記錄。
+- 使用者音量操作的允許時間縮短為約 300ms，避免播放器稍後套用舊音量時被誤存。
+- 在頁面主執行環境預先攔截非使用者觸發的音量覆寫，降低短暫爆音。
+- 若網站仍成功改變音量，前景分頁會以約 16ms 的短過渡恢復，減少 click/pop；大幅變化與背景分頁則立即恢復。
+- 支援動態建立的影音元素與跨網域 iframe。
+- popup 可查看及刪除已記錄的網站。
+- 相容 v2/v3 使用 hostname 作為 storage key 的舊資料格式；若是以同一擴充功能 ID 升級，會在讀取時遷移。
 
-* **Domain-Specific Memory**: Remembers your preferred volume (e.g., 5%) for specific domains and auto-applies it every time you visit.
-* **The "Guardian" Mechanism**: Implements a high-frequency polling mechanism during the first 5 seconds of playback to forcibly block the website's native scripts from resetting the volume to 100%.
-* **Zero-Delay Interception**: Uses `document_start` injection and capture-phase event listeners (`addEventListener('play', ..., true)`) to intercept and lower the volume *before* the first frame of audio is even rendered, eliminating sudden audio bleed/bursts.
-* **SPA-Aware**: Intelligently tracks the `currentSrc` of media elements to detect song changes in Single Page Applications without relying on page reloads.
+## 安裝
 
-## 🚀 Installation (Developer Mode)
+1. 開啟 `chrome://extensions` 或 `edge://extensions`。
+2. 開啟「開發人員模式」。
+3. 選擇「載入未封裝項目」。
+4. 選擇本資料夾。
+5. 已開啟的影音分頁需要重新整理一次，content script 才會載入。
 
-Since this extension requires powerful DOM manipulation, it is designed to be run locally:
+## 行為與限制
 
-1. Download or clone this repository to your local machine.
-2. Open Google Chrome or Microsoft Edge and navigate to `chrome://extensions/`.
-3. Enable **Developer mode** in the top right corner.
-4. Click **Load unpacked** and select the folder containing these files.
-5. Pin the extension, visit a supported website, and use the popup UI to set your desired volume.
-
-## 💡 Extensibility & Future Capabilities
-
-This core architecture—specifically the ability to penetrate iframes and hijack native HTML5 `<video>` and `<audio>` tags—serves as a robust foundation for deep media manipulation. Developers can easily extend this project to achieve the following:
-
-1. **Playback Speed Controller**:
-   Modify `media.volume` to `media.playbackRate`. You can create an extension that forces unskippable videos to play at 16x speed, or perfectly sync custom speeds for educational platforms.
-2. **Auto-Mute for Ads (Ad-Skipper)**:
-   By analyzing the `src` URL or the duration of the media element, the extension can be modified to automatically mute the volume and fast-forward when an ad is detected, then restore the original volume for the main content.
-3. **Global Keyboard Shortcuts**:
-   By adding the `"commands"` API in `manifest.json`, you can map physical keyboard shortcuts (e.g., `Ctrl + Shift + Up`) to control the volume of background tabs without needing to click the extension popup.
-4. **Audio Equalizer (EQ) & Bass Boost**:
-   Instead of just changing the volume attribute, the injected script can route the media element's audio through the **Web Audio API** (`AudioContext`), allowing you to build a full-band equalizer or a volume booster that pushes audio beyond the 100% hardware limit.
-
----
-*Disclaimer: This tool is built for personal productivity and UX enhancement.*
+- 記錄單位是 hostname，例如 `www.youtube.com`；不同子網域會有不同設定。
+- 擴充功能只調整標準 HTML `<video>`／`<audio>` 元素，不能保證控制完全使用 Web Audio API、封閉 Shadow DOM、DRM 或瀏覽器系統頁面的播放器。
+- 音量範圍是 0–100%，不會放大到網站原始音量以上。
+- 因為需要在不同網站套用音量，瀏覽器會顯示可讀取及變更網站資料的權限提示。
+- 音量資料只儲存在 `chrome.storage.local`，不會傳送到外部服務。

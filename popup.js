@@ -1,57 +1,271 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const slider = document.getElementById('volumeSlider');
-    const input = document.getElementById('volumeInput');
-    const domainLabel = document.getElementById('domainLabel');
+(() => {
+  "use strict";
 
-    // 1. 取得目前活躍分頁的網域
-    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-        const currentTab = tabs[0];
-        const url = new URL(currentTab.url);
-        const domain = url.hostname;
+  const STORAGE_PREFIX = "siteVolume:v4:";
+  const slider = document.getElementById("volumeSlider");
+  const input = document.getElementById("volumeInput");
+  const currentSiteLabel = document.getElementById("currentSite");
+  const status = document.getElementById("status");
+  const historyList = document.getElementById("historyList");
+  const clearAllButton = document.getElementById("clearAll");
 
-        domainLabel.textContent = `目前網域：${domain}`;
+  let activeTabId = null;
+  let currentSiteKey = null;
+  let saveTimer = null;
 
-        // 2. 從擴充功能專屬資料庫，讀取這個網域的記憶音量
-        chrome.storage.local.get([domain], (result) => {
-            let savedVolume = result[domain];
-            if (savedVolume !== undefined) {
-                // 將 0.05 轉換回 5 顯示在介面上
-                const percent = Math.round(savedVolume * 100);
-                slider.value = percent;
-                input.value = percent;
-            }
-        });
+  function clampPercent(value) {
+    const number = Number.parseInt(value, 10);
+    if (!Number.isFinite(number)) return 0;
+    return Math.min(100, Math.max(0, number));
+  }
 
-        // 3. 定義「當你調整音量時」要觸發的連動動作
-        const syncAndUpdateVolume = (percentValue) => {
-            // 確保數值不會超過 0~100 的合理範圍
-            let percent = parseInt(percentValue);
-            if (percent < 0) percent = 0;
-            if (percent > 100) percent = 100;
+  function storageKeyFor(siteKey) {
+    return `${STORAGE_PREFIX}${siteKey}`;
+  }
 
-            // 讓滑桿和輸入框的數字保持同步
-            slider.value = percent;
-            input.value = percent;
+  function isVolumeRecord(value) {
+    return value
+      && typeof value === "object"
+      && Number.isFinite(Number(value.volume));
+  }
 
-            // 轉換為系統底層需要的 0.0 ~ 1.0 真實音量
-            const realVolume = percent / 100;
+  function setControls(percent) {
+    const normalized = clampPercent(percent);
+    slider.value = String(normalized);
+    input.value = String(normalized);
+  }
 
-            // 將新音量存入資料庫 (以網域為鑰匙)
-            let data = {};
-            data[domain] = realVolume;
-            chrome.storage.local.set(data);
+  function setSupported(supported) {
+    slider.disabled = !supported;
+    input.disabled = !supported;
+  }
 
-            // 直接發送廣播給網頁底層的 content.js，命令它立刻改變音量
-            chrome.tabs.sendMessage(currentTab.id, {
-                action: "updateVolume", 
-                volume: realVolume
-            }).catch(() => {
-                // 防止在不支援的系統頁面 (如擴充功能管理頁) 報錯
-            });
-        };
+  function formatUpdatedAt(timestamp) {
+    const date = new Date(Number(timestamp));
+    if (Number.isNaN(date.getTime())) return "時間未知";
 
-        // 4. 綁定監聽器：只要滑桿被拖曳，或輸入框數字改變，就立刻觸發更新
-        slider.addEventListener('input', (e) => syncAndUpdateVolume(e.target.value));
-        input.addEventListener('change', (e) => syncAndUpdateVolume(e.target.value));
+    return new Intl.DateTimeFormat("zh-TW", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  async function sendToActiveTab(message) {
+    if (activeTabId === null) return null;
+
+    try {
+      return await chrome.tabs.sendMessage(activeTabId, message);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function renderHistory() {
+    const allValues = await chrome.storage.local.get(null);
+    const records = Object.entries(allValues)
+      .filter(([key, value]) => key.startsWith(STORAGE_PREFIX) && isVolumeRecord(value))
+      .map(([key, value]) => ({ key, ...value }))
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+
+    historyList.replaceChildren();
+
+    if (records.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "尚未記錄任何網站音量";
+      historyList.append(empty);
+      clearAllButton.disabled = true;
+      return;
+    }
+
+    clearAllButton.disabled = false;
+
+    for (const record of records) {
+      const row = document.createElement("div");
+      row.className = "history-item";
+
+      const details = document.createElement("div");
+      const hostname = document.createElement("div");
+      const updatedAt = document.createElement("div");
+      const volume = document.createElement("div");
+      const remove = document.createElement("button");
+
+      hostname.className = "history-site";
+      hostname.textContent = record.hostname || record.key.slice(STORAGE_PREFIX.length);
+
+      updatedAt.className = "history-time";
+      updatedAt.textContent = `更新：${formatUpdatedAt(record.updatedAt)}`;
+
+      volume.className = "history-volume";
+      volume.textContent = `${Math.round(Number(record.volume) * 100)}%`;
+
+      remove.type = "button";
+      remove.className = "delete-record";
+      remove.dataset.storageKey = record.key;
+      remove.setAttribute("aria-label", `刪除 ${hostname.textContent} 的記錄`);
+      remove.title = "刪除記錄";
+      remove.textContent = "×";
+
+      details.append(hostname, updatedAt);
+      row.append(details, volume, remove);
+      historyList.append(row);
+    }
+  }
+
+  async function saveCurrentVolume(percent, updatedAt) {
+    if (!currentSiteKey) return;
+
+    const normalizedPercent = clampPercent(percent);
+    const volume = normalizedPercent / 100;
+    const key = storageKeyFor(currentSiteKey);
+
+    await chrome.storage.local.set({
+      [key]: {
+        hostname: currentSiteKey,
+        volume,
+        updatedAt,
+        source: "popup"
+      }
     });
-});
+
+    status.textContent = `已記住 ${normalizedPercent}%`;
+    await renderHistory();
+  }
+
+  function scheduleSave(percent, updatedAt) {
+    if (saveTimer !== null) {
+      window.clearTimeout(saveTimer);
+    }
+
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      saveCurrentVolume(percent, updatedAt).catch(() => {
+        status.textContent = "儲存失敗，請重新載入擴充功能";
+      });
+    }, 120);
+  }
+
+  function updateFromControl(value) {
+    const percent = clampPercent(value);
+    const updatedAt = Date.now();
+    setControls(percent);
+    status.textContent = "正在套用…";
+    sendToActiveTab({ action: "setVolume", volume: percent / 100, updatedAt });
+    scheduleSave(percent, updatedAt);
+  }
+
+  slider.addEventListener("input", (event) => {
+    updateFromControl(event.target.value);
+  });
+
+  input.addEventListener("input", (event) => {
+    if (event.target.value === "") return;
+    updateFromControl(event.target.value);
+  });
+
+  input.addEventListener("change", (event) => {
+    updateFromControl(event.target.value);
+  });
+
+  historyList.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-storage-key]");
+    if (!button) return;
+
+    const key = button.dataset.storageKey;
+    await chrome.storage.local.remove(key);
+
+    if (key === storageKeyFor(currentSiteKey)) {
+      status.textContent = "已清除目前網站的記錄";
+      await sendToActiveTab({ action: "clearSiteVolume" });
+    }
+
+    await renderHistory();
+  });
+
+  clearAllButton.addEventListener("click", async () => {
+    const allValues = await chrome.storage.local.get(null);
+    const keys = Object.keys(allValues).filter((key) => key.startsWith(STORAGE_PREFIX));
+    if (keys.length === 0) return;
+
+    if (!window.confirm(`確定要清除 ${keys.length} 個網站的音量記錄嗎？`)) return;
+
+    await chrome.storage.local.remove(keys);
+    status.textContent = "已清除全部網站記錄";
+    await sendToActiveTab({ action: "clearSiteVolume" });
+    await renderHistory();
+  });
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+    if (Object.keys(changes).some((key) => key.startsWith(STORAGE_PREFIX))) {
+      renderHistory();
+    }
+  });
+
+  async function initialize() {
+    setSupported(false);
+    await renderHistory();
+
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab?.id || !activeTab.url) {
+      currentSiteLabel.textContent = "無法取得目前分頁";
+      currentSiteLabel.classList.add("unsupported");
+      return;
+    }
+
+    let url;
+    try {
+      url = new URL(activeTab.url);
+    } catch (_error) {
+      currentSiteLabel.textContent = "此頁面不支援音量控制";
+      currentSiteLabel.classList.add("unsupported");
+      return;
+    }
+
+    if (!(["http:", "https:"].includes(url.protocol)) || !url.hostname) {
+      currentSiteLabel.textContent = "此頁面不支援音量控制";
+      currentSiteLabel.classList.add("unsupported");
+      return;
+    }
+
+    activeTabId = activeTab.id;
+    currentSiteKey = url.hostname.toLowerCase();
+    currentSiteLabel.textContent = currentSiteKey;
+    setSupported(true);
+
+    const key = storageKeyFor(currentSiteKey);
+    const result = await chrome.storage.local.get([key, currentSiteKey]);
+    const record = result[key];
+
+    if (isVolumeRecord(record)) {
+      const percent = Math.round(Number(record.volume) * 100);
+      setControls(percent);
+      status.textContent = `上次記錄：${percent}%`;
+      return;
+    }
+
+    // 相容 v2/v3 直接以 hostname 當 key 的資料格式。
+    if (Number.isFinite(Number(result[currentSiteKey]))) {
+      const percent = Math.round(Number(result[currentSiteKey]) * 100);
+      setControls(percent);
+      status.textContent = `已讀取舊版記錄：${percent}%`;
+      scheduleSave(percent, Date.now());
+      return;
+    }
+
+    const state = await sendToActiveTab({ action: "getSiteState" });
+    if (Number.isFinite(Number(state?.currentVolume))) {
+      setControls(Math.round(Number(state.currentVolume) * 100));
+    }
+    status.textContent = "尚無記錄；調整後會自動保存";
+  }
+
+  initialize().catch(() => {
+    currentSiteLabel.textContent = "擴充功能初始化失敗";
+    currentSiteLabel.classList.add("unsupported");
+    status.textContent = "請重新載入擴充功能後再試一次";
+    setSupported(false);
+  });
+})();

@@ -1,29 +1,201 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="zh-Hant">
 <head>
-    <meta charset="utf-8">
-    <style>
-        body { width: 280px; padding: 15px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; }
-        .container { display: flex; flex-direction: column; gap: 15px; }
-        .domain-title { font-size: 14px; font-weight: bold; color: #333; word-break: break-all; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
-        .row { display: flex; align-items: center; gap: 10px; }
-        input[type="range"] { flex-grow: 1; cursor: pointer; }
-        input[type="number"] { width: 55px; padding: 5px; border: 1px solid #ccc; border-radius: 4px; text-align: center; }
-        .hint { font-size: 12px; color: #666; }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>網站音量記憶</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+      color: #172033;
+      background: #f3f6fb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      width: 350px;
+      min-height: 250px;
+      margin: 0;
+      padding: 16px;
+      background: linear-gradient(160deg, #eef4ff 0%, #f8fafc 48%, #f4f1ff 100%);
+    }
+
+    h1, h2, p { margin: 0; }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    h1 { font-size: 17px; }
+    h2 { font-size: 13px; color: #526078; }
+
+    .card {
+      padding: 14px;
+      border: 1px solid rgba(124, 145, 180, 0.24);
+      border-radius: 13px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 8px 24px rgba(51, 65, 85, 0.08);
+    }
+
+    .site-name {
+      margin-bottom: 12px;
+      overflow: hidden;
+      color: #34435c;
+      font-size: 13px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .volume-row {
+      display: grid;
+      grid-template-columns: 1fr 64px 14px;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: #5b5bd6;
+      cursor: pointer;
+    }
+
+    input[type="number"] {
+      width: 64px;
+      padding: 7px 6px;
+      border: 1px solid #cad3e2;
+      border-radius: 8px;
+      background: #fff;
+      color: #172033;
+      text-align: right;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid #5b5bd6;
+      outline-offset: 2px;
+    }
+
+    .status {
+      min-height: 18px;
+      margin-top: 8px;
+      color: #64748b;
+      font-size: 11px;
+    }
+
+    .history-section { margin-top: 14px; }
+
+    .history-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .clear-all {
+      padding: 4px 7px;
+      background: transparent;
+      color: #7c3aed;
+      font-size: 11px;
+    }
+
+    .history-list {
+      display: flex;
+      max-height: 210px;
+      overflow-y: auto;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .history-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .history-site {
+      overflow: hidden;
+      font-size: 12px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .history-time {
+      margin-top: 2px;
+      color: #8490a5;
+      font-size: 10px;
+    }
+
+    .history-volume {
+      color: #4f46e5;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .delete-record {
+      width: 24px;
+      height: 24px;
+      background: #f1f5f9;
+      color: #64748b;
+      line-height: 24px;
+    }
+
+    .empty-state {
+      padding: 18px 8px;
+      color: #7b879c;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .unsupported {
+      color: #a43b3b;
+    }
+
+    input:disabled { cursor: not-allowed; opacity: 0.55; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <div class="domain-title" id="domainLabel">讀取網域中...</div>
-        
-        <div class="row">
-            <input type="range" id="volumeSlider" min="0" max="100" value="100">
-            <input type="number" id="volumeInput" min="0" max="100" value="100">
-            <span style="font-weight: bold; color: #555;">%</span>
-        </div>
-        <div class="hint">拖曳滑桿或輸入數字，音量將自動為此網站永久記憶。</div>
+  <div class="header">
+    <h1>網站音量記憶</h1>
+  </div>
+
+  <section class="card" aria-labelledby="currentSite">
+    <div class="site-name" id="currentSite">讀取目前網站中…</div>
+    <div class="volume-row">
+      <input type="range" id="volumeSlider" min="0" max="100" value="100" aria-label="網站音量">
+      <input type="number" id="volumeInput" min="0" max="100" value="100" aria-label="網站音量百分比">
+      <span>%</span>
     </div>
-    
-    <script src="popup.js"></script>
+    <p class="status" id="status" aria-live="polite"></p>
+  </section>
+
+  <section class="history-section" aria-labelledby="historyTitle">
+    <div class="history-heading">
+      <h2 id="historyTitle">已記錄網站</h2>
+      <button type="button" class="clear-all" id="clearAll">清除全部</button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </section>
+
+  <script src="popup.js"></script>
 </body>
 </html>
