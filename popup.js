@@ -26,6 +26,7 @@
   function isVolumeRecord(value) {
     return value
       && typeof value === "object"
+      && value.volume !== null && value.volume !== "" && value.volume !== undefined
       && Number.isFinite(Number(value.volume));
   }
 
@@ -115,12 +116,13 @@
     }
   }
 
-  function updateFromControl(value) {
+  async function updateFromControl(value) {
     const percent = clampPercent(value);
     const updatedAt = Date.now();
     setControls(percent);
     status.textContent = `目前分頁音量：${percent}%`;
-    sendToActiveTab({ action: "setVolume", volume: percent / 100, updatedAt });
+    const response = await sendToActiveTab({ action: "setVolume", volume: percent / 100, updatedAt });
+    if (!response?.ok) status.textContent = "尚未套用，請重新整理影片頁面後再調整音量";
   }
 
   setSiteDefaultButton.addEventListener("click", async () => {
@@ -135,7 +137,10 @@
         source: "popup-default"
       }
     });
-    status.textContent = `網站預設音量已設為 ${percent}%`;
+    const response = await sendToActiveTab({ action: "setVolume", volume: percent / 100, updatedAt: Date.now() });
+    status.textContent = response?.ok
+      ? `網站預設與目前分頁已設為 ${percent}%`
+      : `預設已存為 ${percent}%；目前分頁尚未套用，請重新整理影片頁面`;
     await renderHistory();
   });
 
@@ -220,25 +225,22 @@
 
     const key = storageKeyFor(currentSiteKey);
     const result = await chrome.storage.local.get([key, currentSiteKey]);
-    const record = result[key];
+    let record = result[key];
 
     // 相容 v2/v3 直接以 hostname 當 key 的資料格式。
-    if (Number.isFinite(Number(result[currentSiteKey]))) {
+    if (!isVolumeRecord(record) && result[currentSiteKey] !== null && result[currentSiteKey] !== "" && Number.isFinite(Number(result[currentSiteKey]))) {
       const percent = Math.round(Number(result[currentSiteKey]) * 100);
+      record = { hostname: currentSiteKey, volume: percent / 100, updatedAt: Date.now(), source: "migration" };
       await chrome.storage.local.set({
-        [key]: {
-          hostname: currentSiteKey,
-          volume: percent / 100,
-          updatedAt: Date.now(),
-          source: "migration"
-        }
+        [key]: record
       });
     }
 
     const state = await sendToActiveTab({ action: "getSiteState" });
-    if (Number.isFinite(Number(state?.currentVolume))) {
-      setControls(Math.round(Number(state.currentVolume) * 100));
-      status.textContent = "目前分頁音量；只會套用到此分頁";
+    const controlledVolume = state?.savedVolume ?? state?.currentVolume;
+    if (controlledVolume !== null && controlledVolume !== undefined && Number.isFinite(Number(controlledVolume))) {
+      setControls(Math.round(Number(controlledVolume) * 100));
+      status.textContent = "由擴充功能控制此分頁音量；影片滑桿不會覆蓋設定";
       return;
     }
     if (isVolumeRecord(record)) {

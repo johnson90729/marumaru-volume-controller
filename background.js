@@ -2,7 +2,9 @@
   "use strict";
 
   const SITE_PREFIX = "siteVolume:v4:";
-  const TAB_PREFIX = "tabVolume:v4:";
+  // Older entries may contain player-generated values, including 100 over a
+  // saved default of zero. Only extension-controlled entries are reused.
+  const TAB_PREFIX = "tabVolume:v4:extension:";
 
   function clampVolume(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -51,6 +53,10 @@
     }
 
     if (request?.action === "saveTabVolume") {
+      if (request.source !== "extension") {
+        sendResponse({ ok: false });
+        return;
+      }
       const volume = clampVolume(request.volume);
       if (volume === null) {
         sendResponse({ ok: false });
