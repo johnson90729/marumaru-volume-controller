@@ -1,14 +1,17 @@
 {
   "manifest_version": 3,
   "name": "多網站音量記憶控制器",
-  "version": "4.0.3",
-  "description": "記住每個網站最後調整的媒體音量，並在下次造訪時自動套用。",
+  "version": "4.1.0",
+  "description": "保存網站預設音量與各分頁的獨立媒體音量，避免相同網站的分頁互相同步。",
   "permissions": [
     "storage",
     "activeTab"
   ],
   "action": {
     "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {

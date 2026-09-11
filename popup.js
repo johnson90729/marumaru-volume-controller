@@ -8,10 +8,10 @@
   const status = document.getElementById("status");
   const historyList = document.getElementById("historyList");
   const clearAllButton = document.getElementById("clearAll");
+  const setSiteDefaultButton = document.getElementById("setSiteDefault");
 
   let activeTabId = null;
   let currentSiteKey = null;
-  let saveTimer = null;
 
   function clampPercent(value) {
     const number = Number.parseInt(value, 10);
@@ -38,6 +38,7 @@
   function setSupported(supported) {
     slider.disabled = !supported;
     input.disabled = !supported;
+    setSiteDefaultButton.disabled = !supported;
   }
 
   function formatUpdatedAt(timestamp) {
@@ -114,47 +115,29 @@
     }
   }
 
-  async function saveCurrentVolume(percent, updatedAt) {
-    if (!currentSiteKey) return;
-
-    const normalizedPercent = clampPercent(percent);
-    const volume = normalizedPercent / 100;
-    const key = storageKeyFor(currentSiteKey);
-
-    await chrome.storage.local.set({
-      [key]: {
-        hostname: currentSiteKey,
-        volume,
-        updatedAt,
-        source: "popup"
-      }
-    });
-
-    status.textContent = `已記住 ${normalizedPercent}%`;
-    await renderHistory();
-  }
-
-  function scheduleSave(percent, updatedAt) {
-    if (saveTimer !== null) {
-      window.clearTimeout(saveTimer);
-    }
-
-    saveTimer = window.setTimeout(() => {
-      saveTimer = null;
-      saveCurrentVolume(percent, updatedAt).catch(() => {
-        status.textContent = "儲存失敗，請重新載入擴充功能";
-      });
-    }, 120);
-  }
-
   function updateFromControl(value) {
     const percent = clampPercent(value);
     const updatedAt = Date.now();
     setControls(percent);
-    status.textContent = "正在套用…";
+    status.textContent = `目前分頁音量：${percent}%`;
     sendToActiveTab({ action: "setVolume", volume: percent / 100, updatedAt });
-    scheduleSave(percent, updatedAt);
   }
+
+  setSiteDefaultButton.addEventListener("click", async () => {
+    if (!currentSiteKey) return;
+    const percent = clampPercent(input.value);
+    const key = storageKeyFor(currentSiteKey);
+    await chrome.storage.local.set({
+      [key]: {
+        hostname: currentSiteKey,
+        volume: percent / 100,
+        updatedAt: Date.now(),
+        source: "popup-default"
+      }
+    });
+    status.textContent = `網站預設音量已設為 ${percent}%`;
+    await renderHistory();
+  });
 
   slider.addEventListener("input", (event) => {
     updateFromControl(event.target.value);
@@ -239,27 +222,32 @@
     const result = await chrome.storage.local.get([key, currentSiteKey]);
     const record = result[key];
 
-    if (isVolumeRecord(record)) {
-      const percent = Math.round(Number(record.volume) * 100);
-      setControls(percent);
-      status.textContent = `上次記錄：${percent}%`;
-      return;
-    }
-
     // 相容 v2/v3 直接以 hostname 當 key 的資料格式。
     if (Number.isFinite(Number(result[currentSiteKey]))) {
       const percent = Math.round(Number(result[currentSiteKey]) * 100);
-      setControls(percent);
-      status.textContent = `已讀取舊版記錄：${percent}%`;
-      scheduleSave(percent, Date.now());
-      return;
+      await chrome.storage.local.set({
+        [key]: {
+          hostname: currentSiteKey,
+          volume: percent / 100,
+          updatedAt: Date.now(),
+          source: "migration"
+        }
+      });
     }
 
     const state = await sendToActiveTab({ action: "getSiteState" });
     if (Number.isFinite(Number(state?.currentVolume))) {
       setControls(Math.round(Number(state.currentVolume) * 100));
+      status.textContent = "目前分頁音量；只會套用到此分頁";
+      return;
     }
-    status.textContent = "尚無記錄；調整後會自動保存";
+    if (isVolumeRecord(record)) {
+      const percent = Math.round(Number(record.volume) * 100);
+      setControls(percent);
+      status.textContent = `網站預設音量：${percent}%`;
+      return;
+    }
+    status.textContent = "尚無網站預設；可先調整再設為預設值";
   }
 
   initialize().catch(() => {

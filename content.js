@@ -1,7 +1,6 @@
 (() => {
   "use strict";
 
-  const STORAGE_PREFIX = "siteVolume:v4:";
   const VOLUME_POLICY_EVENT = "marumaru-volume-control-v4:policy";
   const USER_VOLUME_CHANGE_EVENT = "marumaru-volume-control-v4:user-change";
   const MEDIA_SELECTOR = "video, audio";
@@ -69,8 +68,6 @@
 
   const siteKey = getTopLevelHostname();
   if (!siteKey) return;
-
-  const storageKey = `${STORAGE_PREFIX}${siteKey}`;
 
   function isMediaElement(value) {
     return value instanceof HTMLMediaElement;
@@ -211,8 +208,11 @@
       if (recordToSave === null || !chrome.runtime?.id) return;
 
       try {
-        await chrome.storage.local.set({
-          [storageKey]: recordToSave
+        await chrome.runtime.sendMessage({
+          action: "saveTabVolume",
+          hostname: siteKey,
+          volume: recordToSave.volume,
+          updatedAt: recordToSave.updatedAt
         });
       } catch (_error) {
         // 擴充功能重新載入時，舊 content script 可能暫時失效。
@@ -262,36 +262,18 @@
 
   async function loadSavedVolume() {
     try {
-      // 同時讀取 v4 記錄與 v2/v3 使用的舊網域數值。
-      const result = await chrome.storage.local.get([storageKey, siteKey]);
-      const record = result[storageKey];
+      const state = await chrome.runtime.sendMessage({
+        action: "getTabVolume",
+        hostname: siteKey
+      });
+      const volume = clampVolume(state?.volume);
 
-      if (record && typeof record === "object") {
-        const volume = clampVolume(record.volume);
-        if (volume !== null) {
-          const recordUpdatedAt = normalizeUpdatedAt(record.updatedAt);
-          if (recordUpdatedAt < savedUpdatedAt) return;
-
-          savedVolume = volume;
-          savedUpdatedAt = recordUpdatedAt;
-          publishVolumePolicy(volume);
-          applyVolumeToAll();
-          return;
-        }
-      }
-
-      // 等待 storage 期間若使用者已調整音量，不讓較舊的空結果覆蓋它。
       if (savedUpdatedAt > 0) return;
 
-      const legacyVolume = clampVolume(result[siteKey]);
-      if (legacyVolume !== null) {
-        const migrationRecord = createRecord(legacyVolume, "migration");
-        savedVolume = legacyVolume;
-        savedUpdatedAt = migrationRecord.updatedAt;
-        publishVolumePolicy(legacyVolume);
-        await chrome.storage.local.set({
-          [storageKey]: migrationRecord
-        });
+      if (volume !== null) {
+        savedVolume = volume;
+        savedUpdatedAt = Date.now();
+        publishVolumePolicy(volume);
         applyVolumeToAll();
       } else {
         publishVolumePolicy(null);
@@ -397,30 +379,6 @@
 
   observer.observe(document, { childList: true, subtree: true });
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes[storageKey]) return;
-
-    const nextRecord = changes[storageKey].newValue;
-    if (!nextRecord) {
-      cancelPendingSave();
-      savedVolume = null;
-      savedUpdatedAt = nextUpdatedAt();
-      publishVolumePolicy(null);
-      return;
-    }
-
-    const nextVolume = clampVolume(nextRecord.volume);
-    if (nextVolume === null) return;
-
-    const nextRecordUpdatedAt = normalizeUpdatedAt(nextRecord.updatedAt);
-    if (nextRecordUpdatedAt < savedUpdatedAt) return;
-
-    savedVolume = nextVolume;
-    savedUpdatedAt = nextRecordUpdatedAt;
-    publishVolumePolicy(nextVolume);
-    applyVolumeToAll();
-  });
-
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (request?.action === "setVolume") {
       const nextVolume = clampVolume(request.volume);
@@ -435,6 +393,12 @@
         savedUpdatedAt = requestedUpdatedAt;
         publishVolumePolicy(nextVolume);
         applyVolumeToAll();
+        chrome.runtime.sendMessage({
+          action: "saveTabVolume",
+          hostname: siteKey,
+          volume: nextVolume,
+          updatedAt: requestedUpdatedAt
+        });
         sendResponse({ ok: true, siteKey, volume: nextVolume });
       } else {
         sendResponse({ ok: false, siteKey });
@@ -447,6 +411,7 @@
       savedVolume = null;
       savedUpdatedAt = nextUpdatedAt();
       publishVolumePolicy(null);
+      chrome.runtime.sendMessage({ action: "clearTabVolume" });
       sendResponse({ ok: true, siteKey });
       return;
     }
