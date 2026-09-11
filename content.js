@@ -11,6 +11,7 @@
   const SAVE_DEBOUNCE_MS = 150;
   const RESTORE_RAMP_MS = 16;
   const RESTORE_STEP_MS = 4;
+  const REAPPLY_DELAYS_MS = [0, 50, 150, 400, 1000, 2000];
 
   let savedVolume = null;
   let savedUpdatedAt = 0;
@@ -18,6 +19,7 @@
   let pendingRecord = null;
   let saveTimer = null;
   let volumePointerActive = false;
+  let reapplyGeneration = 0;
 
   const expectedVolumes = new WeakMap();
   const restoreTimers = new WeakMap();
@@ -169,6 +171,18 @@
   function applyVolumeToAll() {
     if (savedVolume === null) return;
     getMediaElements().forEach((media) => applyVolume(media));
+  }
+
+  function scheduleReapplyBurst() {
+    const generation = ++reapplyGeneration;
+    for (const delay of REAPPLY_DELAYS_MS) {
+      window.setTimeout(() => {
+        if (generation !== reapplyGeneration || savedVolume === null) return;
+        if (isRecentUserGesture()) return;
+        publishVolumePolicy(savedVolume);
+        applyVolumeToAll();
+      }, delay);
+    }
   }
 
   function createRecord(volume, source, updatedAt = nextUpdatedAt()) {
@@ -382,8 +396,15 @@
     document.addEventListener(eventName, (event) => {
       if (isMediaElement(event.target) && savedVolume !== null) {
         applyVolume(event.target);
+        scheduleReapplyBurst();
       }
     }, true);
+  });
+
+  // YouTube and similar SPA sites initialize their player after navigation and
+  // may restore their own volume after the media element already exists.
+  ["yt-navigate-finish", "yt-page-data-updated", "popstate"].forEach((eventName) => {
+    window.addEventListener(eventName, scheduleReapplyBurst, true);
   });
 
   const observer = new MutationObserver((mutations) => {
@@ -393,8 +414,11 @@
       for (const node of mutation.addedNodes) {
         if (isMediaElement(node)) {
           applyVolume(node);
+          scheduleReapplyBurst();
         } else {
-          getMediaElements(node).forEach((media) => applyVolume(media));
+          const mediaElements = getMediaElements(node);
+          mediaElements.forEach((media) => applyVolume(media));
+          if (mediaElements.length > 0) scheduleReapplyBurst();
         }
       }
     }
