@@ -1,6 +1,7 @@
 (() => {
   "use strict";
 
+  const STORAGE_PREFIX = "siteVolume:v4:";
   const VOLUME_POLICY_EVENT = "marumaru-volume-control-v4:policy";
   const USER_VOLUME_CHANGE_EVENT = "marumaru-volume-control-v4:user-change";
   const MEDIA_SELECTOR = "video, audio";
@@ -262,11 +263,33 @@
 
   async function loadSavedVolume() {
     try {
-      const state = await chrome.runtime.sendMessage({
-        action: "getTabVolume",
-        hostname: siteKey
-      });
-      const volume = clampVolume(state?.volume);
+      // Read the persistent site default directly. A temporary background/session
+      // failure must never prevent a new tab from receiving its default volume.
+      const storageKey = `${STORAGE_PREFIX}${siteKey}`;
+      const localValues = await chrome.storage.local.get([storageKey, siteKey]);
+      let defaultVolume = clampVolume(localValues[storageKey]?.volume);
+
+      if (defaultVolume === null) {
+        defaultVolume = clampVolume(localValues[siteKey]);
+        if (defaultVolume !== null) {
+          await chrome.storage.local.set({
+            [storageKey]: createRecord(defaultVolume, "migration")
+          });
+        }
+      }
+
+      let tabVolume = null;
+      try {
+        const state = await chrome.runtime.sendMessage({
+          action: "getTabVolume",
+          hostname: siteKey
+        });
+        tabVolume = clampVolume(state?.tabVolume);
+      } catch (_error) {
+        // The site default above is still usable if the service worker restarts.
+      }
+
+      const volume = tabVolume ?? defaultVolume;
 
       if (savedUpdatedAt > 0) return;
 
