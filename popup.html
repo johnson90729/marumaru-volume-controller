@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>網站音量記憶</title>
+  <title>網站音量倍率</title>
   <style>
     :root {
       color-scheme: light;
@@ -15,7 +15,7 @@
     * { box-sizing: border-box; }
 
     body {
-      width: 350px;
+      width: 370px;
       min-height: 250px;
       margin: 0;
       padding: 16px;
@@ -171,27 +171,49 @@
     }
 
     input:disabled { cursor: not-allowed; opacity: 0.55; }
+    .subtitle { margin: 5px 0 15px; color: #64748b; font-size: 12px; line-height: 1.6; }
+    .factor-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 7px; }
+    .metrics { display: grid; grid-template-columns: 1fr 16px 1fr 16px 1fr; align-items: center; text-align: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid #e3e6f1; }
+    .metric-label { display: block; font-size: 10px; color: #64748b; margin-bottom: 5px; }
+    .metric-value { display: block; font-size: 19px; font-weight: 650; color: #334155; }
+    #outputReadout { color: #5b5bd6; }
+    .operator { color: #94a3b8; }
+    #playbackState { margin-top: 10px; color: #64748b; font-size: 11px; line-height: 1.6; }
+    #resetSite { padding: 6px 10px; margin-top: 10px; color: #5b5bd6; background: #efefff; font-size: 12px; }
+    #zeroHint { margin-top: 10px; font-size: 12px; color: #a55216; line-height: 1.6; }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>網站音量記憶</h1>
+    <h1>網站音量倍率</h1>
+    <span style="font-size:11px;color:#64748b">v5.0</span>
   </div>
+  <p class="subtitle">先把太大聲的網站調低，再用網頁滑桿微調。</p>
 
   <section class="card" aria-labelledby="currentSite">
     <div class="site-name" id="currentSite">讀取目前網站中…</div>
+    <label class="factor-label" for="factorInput">網站倍率（100% 為原音量）</label>
     <div class="volume-row">
-      <input type="range" id="volumeSlider" min="0" max="100" value="100" aria-label="網站音量">
-      <input type="number" id="volumeInput" min="0" max="100" value="100" aria-label="網站音量百分比">
+      <input type="range" id="factorSlider" min="0" max="100" value="100" aria-label="網站倍率" disabled>
+      <input type="number" id="factorInput" min="0" max="100" value="100" aria-label="網站倍率百分比" disabled>
       <span>%</span>
     </div>
-    <button type="button" id="setSiteDefault">將目前音量設為網站預設值</button>
+    <button type="button" id="resetSite" disabled>恢復 100%</button>
     <p class="status" id="status" aria-live="polite"></p>
+    <p id="zeroHint" hidden>網站倍率為 0%，已靜音。提高倍率後，網頁滑桿才會有聲音。</p>
+    <div class="metrics" aria-label="目前音量計算">
+      <div><span class="metric-label">播放器</span><span class="metric-value" id="playerReadout">—</span></div>
+      <span class="operator">×</span>
+      <div><span class="metric-label">網站倍率</span><span class="metric-value" id="factorReadout">100%</span></div>
+      <span class="operator">=</span>
+      <div><span class="metric-label">目前輸出</span><span class="metric-value" id="outputReadout">—</span></div>
+    </div>
+    <p id="playbackState"></p>
   </section>
 
   <section class="history-section" aria-labelledby="historyTitle">
     <div class="history-heading">
-      <h2 id="historyTitle">已記錄網站</h2>
+      <h2 id="historyTitle">已記住的網站倍率</h2>
       <button type="button" class="clear-all" id="clearAll">清除全部</button>
     </div>
     <div class="history-list" id="historyList"></div>

@@ -1,87 +1,84 @@
 (() => {
   "use strict";
+  const PREFIX = "siteGain:v5:";
+  const collections = new Map();
+  let sequence = 0;
+  let mutations = Promise.resolve();
 
-  const SITE_PREFIX = "siteVolume:v4:";
-  // Older entries may contain player-generated values, including 100 over a
-  // saved default of zero. Only extension-controlled entries are reused.
-  const TAB_PREFIX = "tabVolume:v4:extension:";
-
-  function clampVolume(value) {
-    if (value === null || value === undefined || value === "") return null;
-    const number = Number(value);
-    if (!Number.isFinite(number)) return null;
-    return Math.min(1, Math.max(0, number));
+  function hostnameOf(value) {
+    if (typeof value !== "string" || !value || value.length > 253) return null;
+    try {
+      const url = new URL(`https://${value}`);
+      return url.hostname === value.toLowerCase() && !url.port && url.pathname === "/" && !url.search && !url.hash
+        && !url.username && !url.password ? url.hostname : null;
+    } catch (_error) { return null; }
+  }
+  function mutate(operation) {
+    const pending = mutations.catch(() => {}).then(operation);
+    mutations = pending;
+    return pending;
   }
 
-  function tabStorageKey(tabId) {
-    return `${TAB_PREFIX}${tabId}`;
-  }
-
-  async function getVolumeState(tabId, hostname) {
-    const tabKey = tabStorageKey(tabId);
-    const siteKey = `${SITE_PREFIX}${hostname}`;
-    const [tabValues, localValues] = await Promise.all([
-      chrome.storage.session.get(tabKey),
-      chrome.storage.local.get([siteKey, hostname])
-    ]);
-    const tabRecord = tabValues[tabKey];
-    const tabVolume = tabRecord?.hostname === hostname
-      ? clampVolume(tabRecord.volume)
-      : null;
-    let defaultVolume = clampVolume(localValues[siteKey]?.volume);
-
-    // v2/v3 stored the volume directly under the hostname.
-    if (defaultVolume === null) defaultVolume = clampVolume(localValues[hostname]);
-
-    return {
-      tabVolume,
-      defaultVolume,
-      volume: tabVolume ?? defaultVolume,
-      source: tabVolume !== null ? "tab" : (defaultVolume !== null ? "site" : null)
-    };
+  async function getTabState(tabId, hostname) {
+    const requestId = `${Date.now()}:${++sequence}`;
+    const frames = new Map();
+    collections.set(requestId, { tabId, hostname, frames });
+    let connected = true;
+    try {
+      await Promise.race([
+        chrome.tabs.sendMessage(tabId, { action: "collectGainState", requestId }),
+        new Promise((_resolve, reject) => setTimeout(() => reject(new Error("No frame response")), 1000))
+      ]);
+      // Each frame reports separately; the tabs API only returns the first reply.
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    } catch (_error) { connected = false; }
+    collections.delete(requestId);
+    const values = await chrome.storage.local.get(PREFIX + hostname);
+    const saved = values[PREFIX + hostname]?.gain;
+    const configured = typeof saved === "number" && Number.isFinite(saved) && saved >= 0 && saved <= 1;
+    const states = [...frames.values()];
+    const candidates = states.filter((s) => s.media).sort((a, b) =>
+      (Number(b.media.playing) * 2 + Number(!b.media.muted)) - (Number(a.media.playing) * 2 + Number(!a.media.muted)));
+    return { ok: true, connected: connected && states.length > 0, factor: configured ? saved : 1, configured,
+      initializing: states.some((s) => s.initializing), initializationError: states.some((s) => s.initializationError),
+      bridgeReady: states.length > 0 && states.every((s) => s.bridgeReady),
+      mediaCount: states.reduce((sum, s) => sum + s.mediaCount, 0), media: candidates[0]?.media || null };
   }
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    const tabId = sender.tab?.id;
-    if (!Number.isInteger(tabId)) return;
-
-    if (request?.action === "getTabVolume") {
-      getVolumeState(tabId, String(request.hostname || "").toLowerCase())
-        .then((state) => sendResponse({ ok: true, ...state }))
-        .catch(() => sendResponse({ ok: false }));
-      return true;
-    }
-
-    if (request?.action === "saveTabVolume") {
-      if (request.source !== "extension") {
-        sendResponse({ ok: false });
-        return;
+    if (request?.action === "gainFrameState") {
+      const collection = collections.get(request.requestId);
+      if (collection && sender.tab?.id === collection.tabId && request.state?.hostname === collection.hostname) {
+        collection.frames.set(sender.frameId, request.state);
       }
-      const volume = clampVolume(request.volume);
-      if (volume === null) {
-        sendResponse({ ok: false });
-        return;
-      }
-      chrome.storage.session.set({
-        [tabStorageKey(tabId)]: {
-          hostname: String(request.hostname || "").toLowerCase(),
-          volume,
-          updatedAt: Number(request.updatedAt) || Date.now()
-        }
-      }).then(() => sendResponse({ ok: true, tabId, volume }))
-        .catch(() => sendResponse({ ok: false }));
+      sendResponse({ ok: true });
+      return;
+    }
+    // Only extension pages (the popup), never website content scripts, may save factors.
+    if (sender.tab || sender.id !== chrome.runtime.id) return;
+    const hostname = hostnameOf(request?.hostname);
+    if (request?.action === "getGainTabState" && hostname && Number.isInteger(request.tabId)) {
+      getTabState(request.tabId, hostname).then(sendResponse).catch(() => sendResponse({ ok: false }));
       return true;
     }
-
-    if (request?.action === "clearTabVolume") {
-      chrome.storage.session.remove(tabStorageKey(tabId))
-        .then(() => sendResponse({ ok: true, tabId }))
-        .catch(() => sendResponse({ ok: false }));
+    let operation;
+    if (request?.action === "setSiteGain" && hostname && typeof request.gain === "number"
+        && Number.isFinite(request.gain) && request.gain >= 0 && request.gain <= 1) {
+      operation = () => chrome.storage.local.set({
+        [PREFIX + hostname]: { hostname, gain: request.gain, updatedAt: Date.now() }
+      });
+    } else if (request?.action === "deleteSiteGain" && hostname) {
+      operation = () => chrome.storage.local.remove(PREFIX + hostname);
+    } else if (request?.action === "clearSiteGains") {
+      operation = async () => {
+        const values = await chrome.storage.local.get(null);
+        await chrome.storage.local.remove(Object.keys(values).filter((key) => key.startsWith(PREFIX)));
+      };
+    }
+    if (operation) {
+      mutate(operation).then(() => sendResponse({ ok: true, persisted: true }))
+        .catch(() => sendResponse({ ok: false, persisted: false }));
       return true;
     }
-  });
-
-  chrome.tabs.onRemoved.addListener((tabId) => {
-    chrome.storage.session.remove(tabStorageKey(tabId));
   });
 })();

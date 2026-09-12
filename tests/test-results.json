@@ -1,0 +1,354 @@
+[
+  {
+    "name": "page sees full original player volume",
+    "actual": [
+      1,
+      1,
+      1
+    ],
+    "expected": [
+      1,
+      1,
+      1
+    ],
+    "passed": true
+  },
+  {
+    "name": "normal/detached/open-shadow output is multiplied",
+    "actual": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "all media are actually playing",
+    "actual": true,
+    "expected": true,
+    "passed": true
+  },
+  {
+    "name": "cross-origin iframe uses top-level site factor",
+    "actual": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "web slider receives real user input",
+    "actual": true,
+    "expected": true,
+    "passed": true
+  },
+  {
+    "name": "web slider stays at 50 instead of snapping to effective 10",
+    "actual": "50",
+    "expected": "50",
+    "passed": true
+  },
+  {
+    "name": "50% player times 20% site equals 10% output",
+    "actual": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "page saves its logical volume, not attenuated output",
+    "actual": "0.5",
+    "expected": "0.5",
+    "passed": true
+  },
+  {
+    "name": "read/write feedback does not repeatedly attenuate",
+    "actual": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "player changes never overwrite saved site factor",
+    "actual": 0.2,
+    "expected": 0.2,
+    "passed": true
+  },
+  {
+    "name": "popup separates player/factor/output",
+    "actual": [
+      "50%",
+      "20%",
+      "10%"
+    ],
+    "expected": [
+      "50%",
+      "20%",
+      "10%"
+    ],
+    "passed": true
+  },
+  {
+    "name": "popup auto-saves site factor",
+    "actual": 0.4,
+    "expected": 0.4,
+    "passed": true
+  },
+  {
+    "name": "factor change preserves player position",
+    "actual": [
+      0.5,
+      1,
+      1
+    ],
+    "expected": [
+      0.5,
+      1,
+      1
+    ],
+    "passed": true
+  },
+  {
+    "name": "factor change scales existing media once",
+    "actual": [
+      0.2,
+      0.4,
+      0.4
+    ],
+    "expected": [
+      0.2,
+      0.4,
+      0.4
+    ],
+    "passed": true
+  },
+  {
+    "name": "factor change updates cross-origin frame",
+    "actual": [
+      0.4,
+      0.4,
+      0.4
+    ],
+    "expected": [
+      0.4,
+      0.4,
+      0.4
+    ],
+    "passed": true
+  },
+  {
+    "name": "site zero stays silent when player goes to 100",
+    "actual": [
+      0,
+      0,
+      0
+    ],
+    "expected": [
+      0,
+      0,
+      0
+    ],
+    "passed": true
+  },
+  {
+    "name": "player position still works under zero factor",
+    "actual": "100",
+    "expected": "100",
+    "passed": true
+  },
+  {
+    "name": "leaving zero restores current player positions",
+    "actual": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "popup accounts for player mute",
+    "actual": "0%",
+    "expected": "0%",
+    "passed": true
+  },
+  {
+    "name": "unmute preserves multiplier and player setting",
+    "actual": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "failed save is shown, not reported as saved",
+    "actual": true,
+    "expected": true,
+    "passed": true
+  },
+  {
+    "name": "failed save leaves actual factor unchanged",
+    "actual": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.1,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "site factor survives reload",
+    "actual": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "new player is not forced to extension percent on its slider",
+    "actual": "100",
+    "expected": "100",
+    "passed": true
+  },
+  {
+    "name": "another tab shares factor but has independent player volume",
+    "actual": [
+      0.06,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.06,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "first tab player remains independent",
+    "actual": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "expected": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "passed": true
+  },
+  {
+    "name": "saved factor updates already-open tabs",
+    "actual": [
+      0.15,
+      0.5,
+      0.5
+    ],
+    "expected": [
+      0.15,
+      0.5,
+      0.5
+    ],
+    "passed": true
+  },
+  {
+    "name": "saved factor updates first tab without changing player volume",
+    "actual": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "expected": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "passed": true
+  },
+  {
+    "name": "removing factor restores original output",
+    "actual": [
+      1,
+      1,
+      1
+    ],
+    "expected": [
+      1,
+      1,
+      1
+    ],
+    "passed": true
+  },
+  {
+    "name": "v4 fixed-volume data is never reinterpreted or resurrected",
+    "actual": [
+      1,
+      1,
+      1
+    ],
+    "expected": [
+      1,
+      1,
+      1
+    ],
+    "passed": true
+  },
+  {
+    "name": "old settings are left intact",
+    "actual": 0,
+    "expected": 0,
+    "passed": true
+  },
+  {
+    "name": "native invalid volume error preserved",
+    "actual": "IndexSizeError",
+    "expected": "IndexSizeError",
+    "passed": true
+  }
+]
